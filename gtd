@@ -1,0 +1,69 @@
+import os
+import subprocess
+import sys
+
+import networkx as nx
+import requests
+from networkx.drawing.nx_agraph import write_dot
+
+import click
+
+
+def get_title_for_issue(template, **kwargs):
+    """
+    Adds compatibility code to match `issue` and `link`
+    """
+    return template.format(**kwargs)
+
+
+@click.group()
+def cli():
+    pass
+
+
+@cli.command()
+@click.option("--template", default="{project_id}:{iid}\n{title}", help="Node Template")
+@click.argument("label")
+def compile(label, template):
+    click.echo("Checking...")
+    gitlab_token = os.environ.get("GITLAB_TOKEN")
+    if not gitlab_token:
+        click.secho("Error: GITLAB_TOKEN must be set", fg="red")
+        sys.exit(1)
+
+    click.echo("Compiling...")
+    headers = {"Authorization": f"Bearer {gitlab_token}"}
+    issues = requests.get(
+        f"https://gitlab.com/api/v4/issues?labels={label}", headers=headers
+    ).json()
+    nodes = []
+    for issue in issues:
+        click.echo(f'processing {issue["project_id"]}:{issue["iid"]} [', nl=False)
+        project_id = issue["project_id"]
+        links = requests.get(
+            f'https://gitlab.com/api/v4/projects/{project_id}/issues/{issue["iid"]}/links',
+            headers=headers,
+        ).json()
+        for link in links:
+            click.echo(".", nl=False)
+            if link["link_type"] == "is_blocked_by":
+                nodes.append(
+                    (
+                        get_title_for_issue(template, **link),
+                        get_title_for_issue(template, **issue),
+                    )
+                )
+        click.echo("]")
+    graph = nx.DiGraph()
+    graph.add_edges_from(nodes)
+    write_dot(graph, "grid.dot")
+
+
+@cli.command()
+def draw():
+    click.echo("Drawing...")
+    subprocess.call(["dot", "-Tpng", "grid.dot", "-o grid.png"])
+
+
+if __name__ == "__main__":
+    cli()
