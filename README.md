@@ -1,3 +1,3 @@
-# gitlab-to-dot
+# gitlab to graph
 
-alpha and proof-of-concept.
+proof-of-concept tool which compiles issues from gitlab into a dependency graph.
